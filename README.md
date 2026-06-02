@@ -17,11 +17,13 @@ With the integrated **Interactive ERD Generator**, you can visually model databa
 
 ### Screenshot
 
-<img width="1913" height="1001" alt="preview2" src="https://github.com/user-attachments/assets/a3aeac14-1ee9-4cc1-88a9-fa79191fa79e" />
+
+<img width="1915" height="1002" alt="preview" src="https://github.com/user-attachments/assets/5d74abd9-dfe0-46d6-8e16-4e095ee333fe" />
+
 
 <br>
 
-<img width="1912" height="999" alt="preview1" src="https://github.com/user-attachments/assets/15e53f44-314f-4c72-90df-f78cced9a372" />
+<img width="1914" height="1000" alt="preview1" src="https://github.com/user-attachments/assets/a302a370-a75a-476f-a982-0ede86b928b5" />
 
 
 
