@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prime SQL ERD Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://unpkg.com/boxicons@2.1.2/css/boxicons.min.css" rel="stylesheet" />
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .dark body { background-color: #353935; }
+        
+        /* Grid background */
+        .canvas-bg {
+            background-size: 20px 20px;
+            background-image: radial-gradient(circle, #cbd5e1 1px, rgba(0, 0, 0, 0) 1px);
+        }
+        html.dark .canvas-bg {
+            background-image: radial-gradient(circle, #475569 1px, rgba(0, 0, 0, 0) 1px);
+        }
+
+        /* ERD Table Node */
+        .erd-table {
+            position: absolute;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8f0;
+            cursor: move;
+            user-select: none;
+            min-width: 280px;
+            max-width: 720px;
+            width: max-content;
+            z-index: 10;
+            overflow: hidden;
+            transition: box-shadow 0.2s ease, border-color 0.2s ease, width 0.3s cubic-bezier(0.4, 0, 0.2, 1), height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        html.dark .erd-table {
+            background: #1e293b;
+            border-color: #334155;
+            color: #f1f5f9;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+        }
+        .erd-table.selected {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4), 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            z-index: 20;
+        }
+        html.dark .erd-table.selected {
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5), 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+        }
+
+        .canvas-container {
+            transform-origin: 0 0;
+            will-change: transform;
+        }
+
+        /* SVG lines */
+        #svg-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+            overflow: visible;
+        }
+        
+        .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: -23px;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background-color: #2563eb;
+            border-radius: 9999px 9999px 0 0;
+        }
+
+        /* Custom scrollbars for records preview */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(156, 163, 175, 0.3);
+            border-radius: 3px;
+        }
+        html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(71, 85, 105, 0.6);
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen w-screen overflow-hidden dark bg-transparent">
+    
+    <!-- App Body -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- Sidebar Tools -->
+        <aside class="w-64 bg-white dark:bg-[#2b2d2b] border-r border-gray-200 dark:border-gray-700/50 flex flex-col z-40 shrink-0 relative transition-all duration-300" id="left-sidebar">
+            <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-col gap-3">
+                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1 mt-1">Tools</h3>
+                <button onclick="addTable()" class="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 hover:shadow-[0_4px_12px_rgba(59,130,246,0.3)] text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-300 ease-out transform hover:-translate-y-0.5 hover:scale-[1.02] active:translate-y-0 active:scale-[0.98] shadow-sm">
+                    <i class="bx bx-plus"></i> Add Table
+                </button>
+            </div>
+            
+            <div class="p-4 border-b border-gray-100 dark:border-gray-800">
+                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Import / Export</h3>
+                <div class="space-y-2">
+                    <button onclick="document.getElementById('import-sql').click()" class="w-full py-2 px-3 bg-gray-50 border border-transparent hover:border-blue-500/30 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium flex items-center justify-start gap-2 transition-all duration-300 ease-out transform hover:-translate-y-0.5 hover:scale-[1.02] active:translate-y-0 active:scale-[0.98] shadow-sm">
+                        <i class="bx bx-import text-blue-500"></i> Import SQL
+                    </button>
+                    <input type="file" id="import-sql" accept=".sql" class="hidden" onchange="importSQL(event)">
+                    
+                    <button onclick="exportSQL()" class="w-full py-2 px-3 bg-gray-50 border border-transparent hover:border-emerald-500/30 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium flex items-center justify-start gap-2 transition-all duration-300 ease-out transform hover:-translate-y-0.5 hover:scale-[1.02] active:translate-y-0 active:scale-[0.98] shadow-sm">
+                        <i class="bx bx-export text-emerald-500"></i> Export SQL
+                    </button>
+                    
+                    <button onclick="exportJSON()" class="w-full py-2 px-3 bg-gray-50 border border-transparent hover:border-yellow-500/30 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium flex items-center justify-start gap-2 transition-all duration-300 ease-out transform hover:-translate-y-0.5 hover:scale-[1.02] active:translate-y-0 active:scale-[0.98] shadow-sm">
+                        <i class="bx bxs-file-json text-yellow-500"></i> Save JSON
+                    </button>
+                    
+                    <button onclick="document.getElementById('load-json').click()" class="w-full py-2 px-3 bg-gray-50 border border-transparent hover:border-orange-500/30 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium flex items-center justify-start gap-2 transition-all duration-300 ease-out transform hover:-translate-y-0.5 hover:scale-[1.02] active:translate-y-0 active:scale-[0.98] shadow-sm">
+                        <i class="bx bx-folder-open text-orange-500"></i> Load JSON
+                    </button>
+                    <input type="file" id="load-json" accept=".json" class="hidden" onchange="loadJSON(event)">
+
+                    <button onclick="clearCanvas()" class="w-full mt-2 py-2 px-3 bg-red-50 border border-transparent hover:border-red-500/30 hover:bg-red-100 dark:bg-red-900/10 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-sm font-medium flex items-center justify-start gap-2 transition-all duration-300 ease-out transform hover:-translate-y-0.5 hover:scale-[1.02] active:translate-y-0 active:scale-[0.98] shadow-sm">
+                        <i class="bx bx-trash"></i> Clear Canvas
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-auto p-4">
+                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Tables</h3>
+                <div id="table-list" class="space-y-1">
+                    <!-- List of tables generated here -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Canvas Area -->
+        <main class="flex-1 relative overflow-hidden bg-gray-50 dark:bg-[#1a1c1a] canvas-bg outline-none" id="main-canvas" tabindex="0" onmousedown="startPan(event)">
+            
+            <div id="canvas-container" class="canvas-container w-full h-full relative" style="transform: translate(0px, 0px) scale(1);">
+                <!-- SVG Layer for relationships -->
+                <svg id="svg-layer"></svg>
+                <!-- Tables appended here -->
+            </div>
+            
+            <!-- Zoom Controls -->
+            <div class="absolute bottom-6 left-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 flex items-center p-1 z-30">
+                <button onclick="zoomOut()" class="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"><i class="bx bx-minus"></i></button>
+                <div id="zoom-level" class="px-2 text-xs font-medium text-gray-600 dark:text-gray-300">100%</div>
+                <button onclick="zoomIn()" class="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"><i class="bx bx-plus"></i></button>
+            </div>
+        </main>
+
+        <!-- Right Side Properties Panel -->
+        <aside id="properties-panel" class="w-80 bg-white dark:bg-[#2b2d2b] border-l border-gray-200 dark:border-gray-700/50 flex flex-col z-40 shrink-0 hidden shadow-xl">
+            <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
+                <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-200" id="prop-title">Table Properties</h2>
+                <button onclick="closeProperties()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                    <i class="bx bx-x text-2xl"></i>
+                </button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-4" id="prop-body">
+                <!-- Dynamic Content (table edit or col edit) -->
+            </div>
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#2b2d2b]" id="prop-footer">
+                
+            </div>
+        </aside>
+    </div>
+
+    <!-- Unified Modal -->
+    <div id="app-modal" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center backdrop-blur-sm">
+        <div class="bg-white dark:bg-[#2b2d2b] w-full max-w-sm p-6 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700/50 transform scale-95 opacity-0 transition-all duration-200" id="app-modal-content">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2" id="modal-title">Title</h3>
+            <div class="text-sm text-gray-600 dark:text-gray-400 mb-4" id="modal-body">Body</div>
+            
+            <div id="modal-input-container" class="hidden mb-4">
+                <!-- For prompts or custom selects -->
+            </div>
+
+            <div class="flex justify-end gap-2" id="modal-footer">
+                <button id="modal-btn-cancel" class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors hidden">Cancel</button>
+                <button id="modal-btn-confirm" class="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const AppModal = {
+            show(options) {
+                return new Promise((resolve) => {
+                    const el = document.getElementById('app-modal');
+                    const content = document.getElementById('app-modal-content');
+                    const title = document.getElementById('modal-title');
+                    const body = document.getElementById('modal-body');
+                    const inputContainer = document.getElementById('modal-input-container');
+                    const cancelBtn = document.getElementById('modal-btn-cancel');
+                    const confirmBtn = document.getElementById('modal-btn-confirm');
+                    
+                    title.innerText = options.title || 'Message';
+                    body.innerHTML = options.body || '';
+                    
+                    inputContainer.classList.add('hidden');
+                    inputContainer.innerHTML = '';
+                    
+                    cancelBtn.classList.add('hidden');
+                    if(options.type === 'confirm' || options.type === 'prompt' || options.type === 'custom') {
+                        cancelBtn.classList.remove('hidden');
+                    }
+                    
+                    if (options.type === 'prompt') {
+                        inputContainer.classList.remove('hidden');
+                        inputContainer.innerHTML = `<input type="text" id="modal-prompt-input" class="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:text-white outline-none focus:border-blue-500" placeholder="${options.placeholder || ''}" value="${options.defaultValue || ''}">`;
+                    } else if (options.type === 'custom') {
+                        inputContainer.classList.remove('hidden');
+                        inputContainer.innerHTML = options.customHtml;
+                    }
+
+                    const close = (result) => {
+                        content.classList.remove('scale-100', 'opacity-100');
+                        content.classList.add('scale-95', 'opacity-0');
+                        setTimeout(() => {
+                            el.classList.add('hidden');
+                            el.classList.remove('flex');
+                            resolve(result);
+                        }, 200);
+                    };
+
+                    cancelBtn.onclick = () => close(null);
+                    confirmBtn.onclick = () => {
+                        if (options.type === 'prompt') {
+                            close(document.getElementById('modal-prompt-input').value);
+                        } else if (options.type === 'custom' && options.getCustomValue) {
+                            close(options.getCustomValue());
+                        } else {
+                            close(true);
+                        }
+                    };
+
+                    if (options.type === 'prompt' || options.type === 'custom') {
+                        confirmBtn.innerText = 'Save';
+                        confirmBtn.className = 'px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors';
+                    } else if (options.type === 'confirm') {
+                        confirmBtn.innerText = 'Confirm';
+                        if (options.danger) {
+                            confirmBtn.className = 'px-4 py-2 rounded-lg text-sm font-medium bg-red-600 hover:bg-red-700 text-white transition-colors';
+                        } else {
+                            confirmBtn.className = 'px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors';
+                        }
+                    } else {
+                        confirmBtn.innerText = 'OK';
+                        confirmBtn.className = 'px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors';
+                    }
+
+                    el.classList.remove('hidden');
+                    el.classList.add('flex');
+                    // Trigger reflow
+                    void el.offsetWidth;
+                    content.classList.remove('scale-95', 'opacity-0');
+                    content.classList.add('scale-100', 'opacity-100');
+                    
+                    if (options.type === 'prompt') {
+                        setTimeout(() => document.getElementById('modal-prompt-input').focus(), 250);
+                    }
+                });
+            }
+        };
+
+        // State
+        let isSyncingFromParent = false;
+        let tables = [];
+        let relationships = [];
+        let pan = { x: 0, y: 0 };
+        let scale = 1;
+        let isDragging = false;
+        let isPanning = false;
+        let startX, startY;
+        let selectedTableId = null;
+        let draggedTableId = null;
+        let autoIncId = 1;
+
+        window.tableRowsCollapsedState = {};
+        window.toggleTableRowsData = function(tableId) {
+            window.tableRowsCollapsedState[tableId] = !window.tableRowsCollapsedState[tableId];
+            renderTables();
+        };
+
+        window.addBlankRecordInline = function(tableId) {
+            const table = tables.find(t => t.id === tableId);
+            if (!table) return;
+            const newRec = {};
+            table.columns.forEach(c => {
+                newRec[c.id] = '';
+            });
+            if (!table.records) table.records = [];
+            table.records.push(newRec);
+            
+            // Expand the rows automatically so they can see the new row immediately
+            window.tableRowsCollapsedState[tableId] = false;
+            
+            saveState();
+            renderTables();
+            
+            // Auto focus on the first cell in that newly added row
+            setTimeout(() => {
+                const container = document.getElementById(`table-rows-data-container-${tableId}`);
+                if (container) {
+                    const lastRow = container.querySelector('tbody tr:last-child');
+                    if (lastRow) {
+                        const firstCell = lastRow.querySelector('td');
+                        if (firstCell) {
+                            firstCell.click();
+                        }
+                    }
+                }
+            }, 100);
+        };
+
+        window.deleteRowInline = function(event, tableId, recIndex) {
+            event.stopPropagation();
+            const table = tables.find(t => t.id === tableId);
+            if (!table || !table.records) return;
+            table.records.splice(recIndex, 1);
+            saveState();
+            renderTables();
+        };
+
+        window.editCellInline = function(event, tableId, recordIndex, colId) {
+            event.stopPropagation();
+            const cell = event.currentTarget;
+            if (cell.querySelector('input')) return; // Already editing page cell
+
+            const currentVal = cell.textContent.trim() === 'null' ? '' : cell.textContent.trim();
+            
+            // Create nice inline editing input field
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = currentVal;
+            // Style input beautifully
+            input.className = 'bg-blue-50/80 dark:bg-slate-800 border border-blue-500 rounded px-1.5 py-0.5 text-[9.5px] font-mono text-gray-900 dark:text-white outline-none focus:ring-1 focus:ring-blue-400 transition-all';
+            
+            // Set dynamic fitting width
+            input.style.width = Math.max(currentVal.length + 2, 8) + 'ch';
+            input.style.minWidth = '60px';
+            input.style.maxWidth = '280px';
+            input.oninput = () => {
+                input.style.width = Math.max(input.value.length + 2, 8) + 'ch';
+            };
+            
+            cell.innerHTML = '';
+            cell.appendChild(input);
+            input.focus();
+            input.select();
+            
+            let finished = false;
+            const saveAndExit = () => {
+                if (finished) return;
+                finished = true;
+                const newVal = input.value.trim();
+                const table = tables.find(t => t.id === tableId);
+                if (table && table.records && table.records[recordIndex]) {
+                    table.records[recordIndex][colId] = newVal;
+                    saveState();
+                    renderTables();
+                }
+            };
+            
+            input.onblur = () => {
+                saveAndExit();
+            };
+            
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter') {
+                    e.stopPropagation();
+                    saveAndExit();
+                } else if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    finished = true;
+                    renderTables(); // re-render to revert
+                }
+            };
+            
+            input.onmousedown = (e) => {
+                e.stopPropagation(); // prevent drag
+            };
+        };
+
+        // Theme toggle
+        function toggleTheme() {
+            document.documentElement.classList.toggle('dark');
+            const isDark = document.documentElement.classList.contains('dark');
+            try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch(e){}
+            renderRelationships(); // Redraw lines for color config update
+        }
+        
+        // Initial setup
+        window.onload = () => {
+            try {
+                if (localStorage.getItem('theme') === 'light') {
+                    document.documentElement.classList.remove('dark');
+                } else {
+                    document.documentElement.classList.add('dark');
+                }
+            } catch(e) {}
+            loadState();
+            
+            // Listeners for zoom & pan
+            const mainCanvas = document.getElementById('main-canvas');
+            mainCanvas.addEventListener('wheel', handleWheel, { passive: false });
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+            window.addEventListener('keydown', handleKeyDown);
+            
+            // Listen for theme changes from parent/other tabs
+            window.addEventListener('storage', (e) => {
+                if(e.key === 'theme') {
+                    if(e.newValue === 'light') {
+                        document.documentElement.classList.remove('dark');
+                    } else {
+                        document.documentElement.classList.add('dark');
+                    }
+                    renderRelationships();
+                }
+            });
+            // Try to communicate with parent for real-time theme switch (if iframe)
+            window.addEventListener('message', (e) => {
+                if (e.data && e.data.type === 'theme') {
+                    if (e.data.theme === 'light') {
+                        document.documentElement.classList.remove('dark');
+                    } else {
+                        document.documentElement.classList.add('dark');
+                    }
+                    renderRelationships();
+                } else if (e.data && e.data.type === 'request_sql') {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({
+                            type: 'erd_updated',
+                            sql: generateSQLText(),
+                            tables: tables,
+                            relationships: relationships
+                        }, '*');
+                    }
+                } else if (e.data && e.data.type === 'sync_from_sqlite') {
+                    const dbState = e.data.state;
+                    if (!dbState || !dbState.tables) return;
+                    
+                    isSyncingFromParent = true;
+                    
+                    const updatedTables = [];
+                    let offsetY = 80;
+                    let offsetX = 80;
+                    
+                    dbState.tables.forEach(dbTable => {
+                        const existingTbl = tables.find(t => t.name.toLowerCase() === dbTable.name.toLowerCase());
+                        const tblId = existingTbl ? existingTbl.id : generateId();
+                        let tblX = existingTbl ? existingTbl.x : offsetX;
+                        let tblY = existingTbl ? existingTbl.y : offsetY;
+                        
+                        if (!existingTbl) {
+                            offsetX += 280;
+                            if (offsetX > 900) {
+                                offsetX = 80;
+                                offsetY += 280;
+                            }
+                        }
+                        
+                        // Map columns
+                        const cols = dbTable.columns.map(dbCol => {
+                            let colId = generateColId();
+                            if (existingTbl) {
+                                const existingCol = existingTbl.columns.find(c => c.name.toLowerCase() === dbCol.name.toLowerCase());
+                                if (existingCol) colId = existingCol.id;
+                            }
+                            return {
+                                id: colId,
+                                name: dbCol.name,
+                                type: (dbCol.type || 'INTEGER').toUpperCase(),
+                                isPk: !!dbCol.pk
+                            };
+                        });
+                        
+                        // Map records
+                        const records = (dbTable.rows || []).map(row => {
+                            const rec = {};
+                            dbTable.columns.forEach((dbCol, idx) => {
+                                const colItem = cols[idx];
+                                rec[colItem.id] = row[idx];
+                            });
+                            return rec;
+                        });
+                        
+                        updatedTables.push({
+                            id: tblId,
+                            name: dbTable.name,
+                            x: tblX,
+                            y: tblY,
+                            columns: cols,
+                            records: records
+                        });
+                    });
+                    
+                    tables = updatedTables;
+                    
+                    // Reconstruct relationships
+                    const newRelationships = [];
+                    dbState.tables.forEach(dbTable => {
+                        const fromTbl = tables.find(t => t.name.toLowerCase() === dbTable.name.toLowerCase());
+                        if (!fromTbl || !dbTable.foreign_keys) return;
+                        
+                        dbTable.foreign_keys.forEach(fk => {
+                            const toTbl = tables.find(t => t.name.toLowerCase() === fk.table.toLowerCase());
+                            if (!toTbl) return;
+                            
+                            const fromColObj = fromTbl.columns.find(c => c.name.toLowerCase() === fk.from.toLowerCase());
+                            const toColObj = toTbl.columns.find(c => c.name.toLowerCase() === fk.to.toLowerCase());
+                            
+                            if (fromColObj && toColObj) {
+                                newRelationships.push({
+                                    fromTable: fromTbl.id,
+                                    fromCol: fromColObj.id,
+                                    toTable: toTbl.id,
+                                    toCol: toColObj.id,
+                                    type: '1:N'
+                                });
+                            }
+                        });
+                    });
+                    
+                    relationships = newRelationships;
+                    
+                    saveState();
+                    renderTables();
+                    
+                    isSyncingFromParent = false;
+                }
+            });
+        };
+
+        function handleKeyDown(e) {
+            // Check if we are inside an input to prevent overriding text deletion
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+                return;
+            }
+            if ((e.key === 'Backspace' || e.key === 'Delete') && selectedTableId) {
+                e.preventDefault();
+                deleteTable(selectedTableId);
+            }
+        }
+
+        function generateId() {
+            return 'tbl_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+        }
+
+        function generateColId() {
+            return 'col_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+        }
+
+        // Data Management
+        function saveState() {
+            renderTableList();
+            renderRelationships();
+            
+            if (!isSyncingFromParent) {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'erd_updated',
+                        sql: generateSQLText(),
+                        tables: tables,
+                        relationships: relationships
+                    }, '*');
+                }
+            }
+        }
+
+        function loadState() {
+            tables = [];
+            relationships = [];
+            pan = {x: 0, y: 0};
+            scale = 1;
+            autoIncId = 1;
+            updateCanvasTransform();
+            renderTables();
+        }
+
+        // Canvas Interactions
+        function handleWheel(e) {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                const zoomFactor = 0.05;
+                if (e.deltaY < 0) zoomIn(zoomFactor);
+                else zoomOut(zoomFactor);
+            }
+        }
+
+        function zoomIn(amount = 0.1) {
+            scale = Math.min(3, scale + amount);
+            updateCanvasTransform();
+        }
+        function zoomOut(amount = 0.1) {
+            scale = Math.max(0.2, scale - amount);
+            updateCanvasTransform();
+        }
+
+        function updateCanvasTransform() {
+            document.getElementById('canvas-container').style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`;
+            document.getElementById('zoom-level').innerText = Math.round(scale * 100) + '%';
+            saveState();
+        }
+
+        function startPan(e) {
+            // Middle click or clicking on background
+            if (e.button === 1 || (!e.target.closest('.erd-table') && !e.target.closest('button'))) {
+                document.getElementById('main-canvas').focus();
+                isPanning = true;
+                startX = e.clientX - pan.x;
+                startY = e.clientY - pan.y;
+                document.getElementById('main-canvas').style.cursor = 'grabbing';
+                closeProperties();
+                selectedTableId = null;
+                renderTables();
+            }
+        }
+
+        function startTableDrag(e, tableId) {
+            if(e.button !== 0) return; // Only left click
+            // Don't drag if clicking buttons or inputs inside table
+            if(['BUTTON', 'INPUT', 'SELECT', 'I'].includes(e.target.tagName)) return;
+            
+            document.getElementById('main-canvas').focus();
+            isDragging = true;
+            draggedTableId = tableId;
+            const t = tables.find(t => t.id === tableId);
+            startX = e.clientX / scale - t.x;
+            startY = e.clientY / scale - t.y;
+            
+            selectedTableId = tableId;
+            renderTables();
+            openTableProperties(tableId);
+            e.stopPropagation();
+        }
+
+        function handleMouseMove(e) {
+            if (isPanning) {
+                pan.x = e.clientX - startX;
+                pan.y = e.clientY - startY;
+                updateCanvasTransform();
+            } else if (isDragging && draggedTableId) {
+                const t = tables.find(t => t.id === draggedTableId);
+                if (t) {
+                    t.x = e.clientX / scale - startX;
+                    t.y = e.clientY / scale - startY;
+                    
+                    // Snap to grid (20px)
+                    t.x = Math.round(t.x / 20) * 20;
+                    t.y = Math.round(t.y / 20) * 20;
+                    
+                    const el = document.getElementById(t.id);
+                    if(el) {
+                        el.style.left = t.x + 'px';
+                        el.style.top = t.y + 'px';
+                    }
+                    renderRelationships();
+                }
+            }
+        }
+
+        function handleMouseUp() {
+            if (isPanning) {
+                isPanning = false;
+                document.getElementById('main-canvas').style.cursor = 'default';
+            }
+            if (isDragging) {
+                isDragging = false;
+                draggedTableId = null;
+                saveState();
+            }
+        }
+
+        // Table Operations
+        function addTable(isInit = false) {
+            const num = autoIncId++;
+            const t = {
+                id: generateId(),
+                name: 'table_' + num,
+                x: -pan.x / scale + 100,
+                y: -pan.y / scale + 100,
+                columns: [
+                    { id: generateColId(), name: 'id', type: 'INTEGER', isPk: true, isFk: null }
+                ],
+                records: []
+            };
+            tables.push(t);
+            if(!isInit) {
+                selectedTableId = t.id;
+                saveState();
+                renderTables();
+                openTableProperties(t.id);
+            }
+        }
+
+        async function deleteTable(id) {
+            const confirmed = await AppModal.show({
+                type: 'confirm',
+                title: 'Delete Table',
+                body: 'Delete this table? This action cannot be undone.',
+                danger: true
+            });
+            if(confirmed) {
+                tables = tables.filter(t => t.id !== id);
+                relationships = relationships.filter(r => r.fromTable !== id && r.toTable !== id);
+                selectedTableId = null;
+                closeProperties();
+                saveState();
+                renderTables();
+            }
+        }
+
+        function addColumn(tableId) {
+            const table = tables.find(t => t.id === tableId);
+            if(table) {
+                table.columns.push({ id: generateColId(), name: 'new_col', type: 'VARCHAR', isPk: false, isFk: null });
+                saveState();
+                renderTables();
+                openTableProperties(tableId);
+            }
+        }
+        
+        function deleteColumn(tableId, colId) {
+            const table = tables.find(t => t.id === tableId);
+            if(table) {
+                table.columns = table.columns.filter(c => c.id !== colId);
+                // Remove relationships
+                relationships = relationships.filter(r => !(r.fromTable === tableId && r.fromCol === colId) && !(r.toTable === tableId && r.toCol === colId));
+                saveState();
+                renderTables();
+                openTableProperties(tableId);
+            }
+        }
+
+        // UI Renderers
+        function renderTables() {
+            const container = document.getElementById('canvas-container');
+            // Remove existing tables
+            document.querySelectorAll('.erd-table').forEach(e => e.remove());
+
+            tables.forEach(t => {
+                const isSel = t.id === selectedTableId;
+                const el = document.createElement('div');
+                el.className = `erd-table flex flex-col ${isSel ? 'selected' : ''}`;
+                el.id = t.id;
+                el.style.left = t.x + 'px';
+                el.style.top = t.y + 'px';
+                el.onmousedown = (e) => startTableDrag(e, t.id);
+
+                let colsHtml = '';
+                t.columns.forEach(c => {
+                    const fkRel = relationships.find(r => r.fromTable === t.id && r.fromCol === c.id);
+                    let icons = '';
+                    if(c.isPk) icons += '<i class="bx bxs-key text-yellow-500" title="Primary Key"></i>';
+                    if(fkRel) icons += '<i class="bx bx-link text-blue-500" title="Foreign Key"></i>';
+                    
+                    colsHtml += `
+                        <div class="px-3 py-2 flex justify-between items-center border-t border-gray-100 dark:border-slate-700/50 text-[13px] hover:bg-blue-50/50 dark:hover:bg-slate-800/50 transition-colors col-row" data-colid="${c.id}">
+                            <div class="flex items-center text-gray-700 dark:text-slate-300 font-medium tracking-tight whitespace-nowrap overflow-hidden text-ellipsis mr-2">
+                                ${icons} <span class="ml-1">${c.name}</span>
+                            </div>
+                            <div class="text-[10px] text-gray-500 dark:text-slate-400 font-mono bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 rounded uppercase tracking-wider">${c.type}</div>
+                        </div>
+                    `;
+                });
+
+                let rowsHtml = '';
+                if (t.records && t.records.length > 0) {
+                    const isCollapsed = !!window.tableRowsCollapsedState[t.id];
+                    rowsHtml = `
+                        <div class="border-t border-gray-200 dark:border-slate-700/60 bg-gray-50/40 dark:bg-slate-900/25">
+                            <button onclick="toggleTableRowsData('${t.id}'); event.stopPropagation();" class="w-full px-3 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-800/40 text-[10px] text-gray-500 dark:text-slate-400 font-bold tracking-wider flex justify-between items-center transition-colors">
+                                <span class="flex items-center gap-1 uppercase">
+                                    <i class="bx bx-grid-alt text-blue-500"></i> Records Data (${t.records.length})
+                                </span>
+                                <i class="bx ${isCollapsed ? 'bx-chevron-right' : 'bx-chevron-down'} text-xs"></i>
+                            </button>
+                            <div id="table-rows-data-container-${t.id}" class="${isCollapsed ? 'hidden' : 'block'} overflow-x-auto max-h-64 max-w-full border-t border-gray-200/50 dark:border-slate-800/50 custom-scrollbar font-sans">
+                                <table class="w-full text-left border-collapse table-auto">
+                                    <thead class="bg-gray-100/60 dark:bg-slate-900/50 border-b border-gray-150 dark:border-slate-800">
+                                        <tr>
+                                            ${t.columns.map(c => `
+                                                <th class="py-1.5 px-3.5 font-bold text-[9px] uppercase font-mono tracking-tight text-gray-500 dark:text-slate-400 border-r border-gray-200/50 dark:border-slate-800/50 whitespace-nowrap" style="min-width: 90px;">
+                                                    ${c.name}
+                                                </th>
+                                            `).join('')}
+                                            <th class="py-1 px-1 font-bold text-[9px] text-center uppercase tracking-tight text-gray-500 dark:text-slate-400 w-6"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100 dark:divide-slate-800/40">
+                                        ${t.records.map((rec, recIndex) => `
+                                            <tr class="hover:bg-blue-500/5 dark:hover:bg-blue-500/10 transition-colors group/row">
+                                                ${t.columns.map(c => `
+                                                    <td class="py-1.5 px-3.5 border-r border-gray-150/10 dark:border-slate-800/30 whitespace-nowrap font-mono text-[9.5px] text-gray-700 dark:text-slate-300 cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-700/50 transition-all text-ellipsis overflow-hidden select-text" 
+                                                        style="min-width: 90px; max-width: 240px;"
+                                                        onclick="editCellInline(event, '${t.id}', ${recIndex}, '${c.id}')"
+                                                        title="Click to edit value">
+                                                        ${rec[c.id] !== null && rec[c.id] !== undefined && String(rec[c.id]).trim() !== '' ? String(rec[c.id]) : '<span class="text-gray-350 dark:text-slate-600 italic">null</span>'}
+                                                    </td>
+                                                `).join('')}
+                                                <td class="py-1 px-1 text-center whitespace-nowrap">
+                                                    <button onclick="deleteRowInline(event, '${t.id}', ${recIndex})" class="text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover/row:opacity-100 p-0.5 rounded" title="Delete row">
+                                                        <i class="bx bx-trash text-[10px]"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    rowsHtml = `
+                        <div class="border-t border-gray-150 dark:border-slate-700/60 px-3 py-2.5 bg-gray-50/10 dark:bg-slate-900/5 text-[10px] text-gray-400 dark:text-slate-500 italic text-center flex flex-col items-center justify-center gap-1">
+                            <span>No records yet in database</span>
+                            <button onclick="addBlankRecordInline('${t.id}'); event.stopPropagation();" class="text-[9px] text-blue-500 hover:underline"><i class="bx bx-plus"></i> Add first record</button>
+                        </div>
+                    `;
+                }
+
+                el.innerHTML = `
+                    <div class="px-3 py-2.5 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-slate-800 dark:to-slate-900 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center cursor-move">
+                        <span class="font-bold text-sm text-gray-800 dark:text-gray-100 flex items-center gap-1.5 tracking-wide">
+                            <i class="bx bx-table text-blue-500/80 dark:text-blue-400"></i> ${t.name}
+                        </span>
+                        <div class="flex gap-1">
+                            <button onclick="addColumn('${t.id}'); event.stopPropagation();" class="text-[10px] text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors rounded px-1.5 py-0.5 border border-dashed border-gray-300 dark:border-slate-700 hover:border-blue-500/40 flex items-center gap-0.5" title="Add Column"><i class="bx bx-plus text-xs"></i>Col</button>
+                            <button onclick="addBlankRecordInline('${t.id}'); event.stopPropagation();" class="text-[10px] text-gray-400 dark:text-gray-500 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors rounded px-1.5 py-0.5 border border-dashed border-gray-300 dark:border-slate-700 hover:border-emerald-500/40 flex items-center gap-0.5" title="Add Row/Record"><i class="bx bx-plus text-xs"></i>Row</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-col bg-white dark:bg-[#1e293b]">
+                        ${colsHtml}
+                    </div>
+                    ${rowsHtml}
+                `;
+                container.appendChild(el);
+            });
+            renderTableList();
+            setTimeout(renderRelationships, 10);
+        }
+
+        function renderTableList() {
+            const list = document.getElementById('table-list');
+            list.innerHTML = '';
+            tables.forEach(t => {
+                const btn = document.createElement('button');
+                btn.className = `w-full text-left px-3 py-2 rounded flex items-center justify-between text-sm ${t.id === selectedTableId ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`;
+                btn.innerHTML = `<span class="truncate"><i class="bx bx-table mr-2"></i>${t.name}</span> <span class="text-xs bg-gray-200 dark:bg-gray-700 rounded px-1.5 py-0.5">${t.columns.length}</span>`;
+                btn.onclick = () => {
+                    selectedTableId = t.id;
+                    // Center on table
+                    pan.x = -t.x * scale + (window.innerWidth / 2) - 140;
+                    pan.y = -t.y * scale + (window.innerHeight / 2);
+                    updateCanvasTransform();
+                    renderTables();
+                    openTableProperties(t.id);
+                };
+                list.appendChild(btn);
+            });
+        }
+
+        function renderRelationships() {
+            const svg = document.getElementById('svg-layer');
+            svg.innerHTML = '';
+            
+            const isDark = document.documentElement.classList.contains('dark');
+            const lineColor = isDark ? '#64748b' : '#94a3b8';
+            const activeColor = '#3b82f6';
+
+            // SVG Markers
+            svg.innerHTML = `
+                <defs>
+                    <marker id="arrow-${isDark?'dark':'light'}" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="${lineColor}"/>
+                    </marker>
+                    <marker id="arrow-active" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="${activeColor}"/>
+                    </marker>
+                    <!-- Dot for One-to-Many -->
+                    <marker id="dot-${isDark?'dark':'light'}" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5">
+                        <circle cx="5" cy="5" r="5" fill="${lineColor}"/>
+                    </marker>
+                </defs>
+            `;
+
+            relationships.forEach(rel => {
+                const fromTbl = document.getElementById(rel.fromTable);
+                const toTbl = document.getElementById(rel.toTable);
+                if(!fromTbl || !toTbl) return;
+
+                const fromColEl = fromTbl.querySelector(`[data-colid="${rel.fromCol}"]`);
+                const toColEl = toTbl.querySelector(`[data-colid="${rel.toCol}"]`);
+                if(!fromColEl || !toColEl) return;
+
+                // Calculate relative positions inside canvas
+                const r1 = fromColEl.getBoundingClientRect();
+                const r2 = toColEl.getBoundingClientRect();
+                
+                const mainRect = document.getElementById('main-canvas').getBoundingClientRect();
+                
+                // Convert back from scaled/panned screen coords to logical canvas coords
+                const getCanvasCoords = (rect, isRight) => {
+                    return {
+                        x: (rect.left - mainRect.left - pan.x) / scale + (isRight ? rect.width / scale: 0),
+                        y: (rect.top - mainRect.top - pan.y) / scale + (rect.height / 2) / scale
+                    };
+                };
+
+                const startIsRight = r1.left < r2.left; // simple heuristic
+                const p1 = getCanvasCoords(r1, startIsRight);
+                const p2 = getCanvasCoords(r2, !startIsRight);
+
+                // Curving
+                const cpOffset = Math.max(Math.abs(p2.x - p1.x) / 2, 50);
+                const pathStr = `M ${p1.x} ${p1.y} C ${p1.x + (startIsRight ? cpOffset : -cpOffset)} ${p1.y}, ${p2.x + (!startIsRight ? cpOffset : -cpOffset)} ${p2.y}, ${p2.x} ${p2.y}`;
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', pathStr);
+                
+                const isActive = (selectedTableId === rel.fromTable || selectedTableId === rel.toTable);
+                path.setAttribute('stroke', isActive ? activeColor : lineColor);
+                path.setAttribute('stroke-width', isActive ? '2' : '1.5');
+                path.setAttribute('fill', 'none');
+                
+                if(rel.type === '1:N') {
+                    path.setAttribute('marker-end', isActive ? 'url(#arrow-active)' : `url(#arrow-${isDark?'dark':'light'})`);
+                    // we remove marker-start dot as we will draw actual nodes
+                } else if(rel.type === '1:1') {
+                    path.setAttribute('stroke-dasharray', '5,5');
+                }
+
+                svg.appendChild(path);
+
+                // Draw solid connection nodes at both ends
+                const node1 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                node1.setAttribute('cx', p1.x);
+                node1.setAttribute('cy', p1.y);
+                node1.setAttribute('r', '4');
+                node1.setAttribute('fill', isDark ? '#1a1c1a' : '#ffffff');
+                node1.setAttribute('stroke', isActive ? activeColor : lineColor);
+                node1.setAttribute('stroke-width', '2');
+
+                const node2 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                node2.setAttribute('cx', p2.x);
+                node2.setAttribute('cy', p2.y);
+                node2.setAttribute('r', '4');
+                node2.setAttribute('fill', isActive ? activeColor : lineColor);
+
+                svg.appendChild(node1);
+                svg.appendChild(node2);
+            });
+        }
+
+        // Properties Panel (Table/Column Edit)
+        function openTableProperties(tableId) {
+            const table = tables.find(t => t.id === tableId);
+            if(!table) return;
+            
+            const panel = document.getElementById('properties-panel');
+            const body = document.getElementById('prop-body');
+            const foot = document.getElementById('prop-footer');
+            
+            panel.classList.remove('hidden');
+
+            let types = ['INTEGER', 'VARCHAR', 'TEXT', 'DATE', 'DATETIME', 'BOOLEAN', 'FLOAT', 'DECIMAL'];
+
+            let html = `
+                <div class="mb-4">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Table Name</label>
+                    <input type="text" value="${table.name}" onchange="updateTableName('${table.id}', this.value)" class="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm dark:text-white outline-none focus:border-blue-500">
+                </div>
+                <div class="mb-2 flex justify-between items-center">
+                    <label class="block text-xs font-bold text-gray-500 uppercase">Columns</label>
+                    <button onclick="addColumn('${table.id}')" class="text-xs text-blue-500 hover:underline">+ Add Col</button>
+                </div>
+                <div class="space-y-3">
+            `;
+
+            table.columns.forEach((c) => {
+                let typeOpts = types.map(t => `<option value="${t}" ${c.type === t ? 'selected' : ''}>${t}</option>`).join('');
+                html += `
+                    <div class="bg-gray-50 dark:bg-gray-800/50 p-2 rounded-lg border border-gray-200 dark:border-gray-700 relative group">
+                        <button onclick="deleteColumn('${table.id}','${c.id}')" class="absolute top-1 right-1 text-gray-400 hover:text-red-500 hidden group-hover:block"><i class="bx bx-x"></i></button>
+                        <input type="text" value="${c.name}" onchange="updateCol('${table.id}','${c.id}','name',this.value)" class="w-full bg-transparent font-medium text-sm border-b border-gray-300 dark:border-gray-600 mb-2 pb-1 text-gray-800 dark:text-white outline-none focus:border-blue-500">
+                        <div class="flex gap-2">
+                            <select onchange="updateCol('${table.id}','${c.id}','type',this.value)" class="flex-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs p-1 dark:text-white outline-none">
+                                ${typeOpts}
+                            </select>
+                            <label class="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300 cursor-pointer">
+                                <input type="checkbox" ${c.isPk ? 'checked' : ''} onchange="updateCol('${table.id}','${c.id}','isPk',this.checked)"> PK
+                            </label>
+                        </div>
+                        <div class="mt-2 text-xs">
+                            <button onclick="openFkDialog('${table.id}','${c.id}')" class="text-blue-500 hover:underline flex items-center gap-1">
+                                <i class="bx bx-link"></i> ${relationships.find(r => r.fromTable===table.id && r.fromCol===c.id) ? 'Edit Foreign Key' : 'Add Foreign Key'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `</div>`;
+            body.innerHTML = html;
+
+            foot.innerHTML = `
+                <button onclick="manageRecords('${table.id}')" class="w-full mb-2 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 rounded-lg text-sm font-medium transition-colors">
+                    Manage Table Values
+                </button>
+                <button onclick="deleteTable('${table.id}')" class="w-full py-2 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-500/10 dark:hover:bg-red-500/20 rounded-lg text-sm font-medium transition-colors">
+                    Delete Table
+                </button>
+            `;
+        }
+
+        function closeProperties() {
+            document.getElementById('properties-panel').classList.add('hidden');
+        }
+
+        async function manageRecords(tableId) {
+            const table = tables.find(t => t.id === tableId);
+            if(!table) return;
+            
+            // Build simple HTML table to manage values
+            let html = `<div class="max-h-64 overflow-auto border border-gray-200 dark:border-gray-700 rounded mb-2">
+                <table class="w-full text-left text-xs bg-white dark:bg-gray-800">
+                    <thead class="bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-300 sticky top-0">
+                        <tr>`;
+            table.columns.forEach(c => {
+                html += `<th class="p-2 border-b dark:border-gray-600 font-medium">${c.name}</th>`;
+            });
+            html += `<th class="p-2 border-b dark:border-gray-600 font-medium w-10"></th></tr></thead><tbody>`;
+            
+            if(!table.records) table.records = [];
+            
+            if(table.records.length === 0) {
+                html += `<tr><td colspan="${table.columns.length + 1}" class="p-4 text-center text-gray-500 dark:text-gray-400">No records yet.</td></tr>`;
+            } else {
+                table.records.forEach((rec, idx) => {
+                    html += `<tr class="border-b dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30">`;
+                    table.columns.forEach(c => {
+                        html += `<td class="p-2 text-gray-800 dark:text-gray-200">${rec[c.id] || ''}</td>`;
+                    });
+                    html += `<td class="p-2"><button onclick="deleteRecord('${table.id}', ${idx})" class="text-red-500 hover:text-red-600"><i class="bx bx-trash"></i></button></td></tr>`;
+                });
+            }
+            html += `</tbody></table></div>`;
+            
+            // Form to add a new record
+            html += `<div class="flex flex-col gap-2 p-3 bg-gray-50 dark:bg-gray-800/50 rounded border border-gray-200 dark:border-gray-700 mt-4"><div class="font-bold text-xs text-gray-500 mb-1">Add New Record</div><div id="new-record-form" class="space-y-2">`;
+            table.columns.forEach(c => {
+                html += `<div class="flex items-center gap-2">
+                    <label class="w-24 text-xs font-medium text-gray-600 dark:text-gray-400 truncate">${c.name}</label>
+                    <input type="text" id="record-input-${c.id}" class="flex-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-xs dark:text-white outline-none focus:border-blue-500" placeholder="Value...">
+                </div>`;
+            });
+            html += `</div><button onclick="addRecord('${table.id}')" class="mt-2 w-full py-1.5 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-medium transition-colors">Add</button></div>`;
+
+            await AppModal.show({
+                type: 'custom',
+                title: `Values for '${table.name}'`,
+                body: '',
+                customHtml: html
+            });
+            // Re-render table representation if needed
+        }
+
+        window.addRecord = function(tableId) {
+            const table = tables.find(t => t.id === tableId);
+            if(!table) return;
+            const newRec = {};
+            table.columns.forEach(c => {
+                const el = document.getElementById(`record-input-${c.id}`);
+                newRec[c.id] = el ? el.value : '';
+            });
+            if(!table.records) table.records = [];
+            table.records.push(newRec);
+            saveState();
+            
+            // Hack to instantly refresh modal by triggering close then reopen?
+            // Since it's inline in modal, best we manually refresh it. Better: close modal and reopen.
+            document.getElementById('modal-btn-confirm').click(); // close modal
+            setTimeout(() => manageRecords(tableId), 300); // reopen
+        };
+
+        window.deleteRecord = function(tableId, recordIndex) {
+            const table = tables.find(t => t.id === tableId);
+            if(!table) return;
+            table.records.splice(recordIndex, 1);
+            saveState();
+            document.getElementById('modal-btn-confirm').click();
+            setTimeout(() => manageRecords(tableId), 300);
+        };
+
+        function updateTableName(id, val) {
+            const t = tables.find(x => x.id === id);
+            if(t) {
+                t.name = val.trim().replace(/\s+/g, '_');
+                saveState();
+                renderTables();
+            }
+        }
+        function updateCol(tId, cId, key, val) {
+            const t = tables.find(x => x.id === tId);
+            if(t) {
+                const c = t.columns.find(x => x.id === cId);
+                if(c) {
+                    if(key === 'name') c[key] = val.trim().replace(/\s+/g, '_');
+                    else c[key] = val;
+                    saveState();
+                    renderTables();
+                }
+            }
+        }
+
+        // Extremely basic Foreign key logic
+        async function openFkDialog(tId, cId) {
+            const tableOpts = tables.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+            
+            const targetTablePrompt = await AppModal.show({
+                type: 'custom',
+                title: 'Add Foreign Key',
+                body: 'Select a target table to reference:',
+                customHtml: `
+                    <select id="modal-fk-target" class="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:text-white outline-none focus:border-blue-500">
+                        <option value="">-- Select Table --</option>
+                        ${tableOpts}
+                    </select>
+                `,
+                getCustomValue: () => document.getElementById('modal-fk-target').value
+            });
+            if(!targetTablePrompt) return;
+            
+            const targetTable = tables.find(t => t.name.toLowerCase() === targetTablePrompt.toLowerCase());
+            if(!targetTable) {
+                await AppModal.show({ title: 'Error', body: 'Table not found!' });
+                return;
+            }
+
+            const pkCol = targetTable.columns.find(c => c.isPk) || targetTable.columns[0];
+            if(!pkCol) {
+                await AppModal.show({ title: 'Error', body: 'Target table has no columns!' });
+                return;
+            }
+
+            // Remove existing FK from this col
+            relationships = relationships.filter(r => !(r.fromTable === tId && r.fromCol === cId));
+            
+            relationships.push({
+                fromTable: tId,
+                fromCol: cId,
+                toTable: targetTable.id,
+                toCol: pkCol.id,
+                type: '1:N'
+            });
+
+            saveState();
+            openTableProperties(tId);
+        }
+
+        async function clearCanvas() {
+            const confirmed = await AppModal.show({
+                type: 'confirm',
+                title: 'Clear Canvas',
+                body: 'Clear everything? This cannot be undone.',
+                danger: true
+            });
+            if(confirmed) {
+                tables = [];
+                relationships = [];
+                autoIncId = 1;
+                selectedTableId = null;
+                closeProperties();
+                saveState();
+                renderTables();
+            }
+        }
+
+        // Export/Import JSON
+        function exportJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({tables, relationships}));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", "erd_schema.json");
+            dlAnchorElem.click();
+        }
+
+        function loadJSON(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const contents = JSON.parse(e.target.result);
+                    tables = contents.tables || [];
+                    relationships = contents.relationships || [];
+                    saveState();
+                    await AppModal.show({ title: 'Success', body: 'Project loaded successfully!' });
+                } catch(err) {
+                    await AppModal.show({ title: 'Error', body: 'Invalid JSON file' });
+                }
+                document.getElementById('load-json').value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function generateSQLText() {
+            let sql = '';
+            tables.forEach(t => {
+                sql += `CREATE TABLE ${t.name} (\n`;
+                const colDefs = [];
+                t.columns.forEach(c => {
+                    let def = `  ${c.name} ${c.type}`;
+                    if(c.isPk) def += ' PRIMARY KEY';
+                    colDefs.push(def);
+                });
+                
+                relationships.filter(r => r.fromTable === t.id).forEach(r => {
+                    const fromCol = t.columns.find(c => c.id === r.fromCol);
+                    const toTbl = tables.find(x => x.id === r.toTable);
+                    if(fromCol && toTbl) {
+                        const toCol = toTbl.columns.find(c => c.id === r.toCol);
+                        if(toCol) {
+                            colDefs.push(`  FOREIGN KEY (${fromCol.name}) REFERENCES ${toTbl.name}(${toCol.name})`);
+                        }
+                    }
+                });
+
+                sql += colDefs.join(',\n') + '\n);\n\n';
+                
+                if (t.records && t.records.length > 0) {
+                    const colNames = t.columns.map(c => c.name).join(', ');
+                    t.records.forEach(rec => {
+                        const vals = t.columns.map(c => {
+                            let v = rec[c.id];
+                            if(v === undefined || v === null) return 'NULL';
+                            // simple escaping: if it's not a number, quote it.
+                            if(isNaN(v) && v !== 'NULL' && v.toLowerCase() !== 'true' && v.toLowerCase() !== 'false') {
+                                return `'${v.replace(/'/g, "''")}'`;
+                            }
+                            return v === '' ? "''" : v;
+                        }).join(', ');
+                        sql += `INSERT INTO ${t.name} (${colNames}) VALUES (${vals});\n`;
+                    });
+                    sql += '\n';
+                }
+            });
+            return sql;
+        }
+
+        // Extra: Generate dummy SQL for export
+        function exportSQL() {
+            const sql = generateSQLText();
+            const dataStr = "data:text/sql;charset=utf-8," + encodeURIComponent(sql);
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", "schema.sql");
+            dlAnchorElem.click();
+        }
+
+        // Parse rudimentary SQL (CREATE TABLE only, basic Regex)
+        function importSQL(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(evt) {
+                const text = evt.target.result;
+                const tblRegex = /CREATE\s+TABLE\s+(\w+)\s*\(([\s\S]*?)\);/gi;
+                let match;
+                const newTables = [];
+                let offsetY = 100;
+                let offsetX = 100;
+
+                while ((match = tblRegex.exec(text)) !== null) {
+                    const tableName = match[1];
+                    const body = match[2];
+                    const cols = [];
+                    
+                    const lines = body.split(',').map(l => l.trim().replace(/\n/g, ' '));
+                    lines.forEach(line => {
+                        if(line.toUpperCase().startsWith('FOREIGN KEY') || line.toUpperCase().startsWith('PRIMARY KEY') || line.toUpperCase().startsWith('UNIQUE')) return; // skip constraints
+                        if(!line) return;
+                        
+                        const parts = line.split(/\s+/);
+                        const colName = parts[0];
+                        const colType = parts[1] ? parts[1].replace(/\([0-9,]+\)/,'') : 'VARCHAR'; // simplistic type extraction
+                        const isPk = line.toLowerCase().includes('primary key');
+                        
+                        cols.push({ id: generateColId(), name: colName, type: colType.toUpperCase(), isPk });
+                    });
+
+                    newTables.push({
+                        id: generateId(),
+                        name: tableName,
+                        x: offsetX,
+                        y: offsetY,
+                        columns: cols
+                    });
+
+                    offsetX += 320;
+                    if(offsetX > 1000) { offsetX = 100; offsetY += 300; }
+                }
+
+                if(newTables.length > 0) {
+                    tables = tables.concat(newTables);
+                    saveState();
+                    await AppModal.show({ title: 'Success', body: `Imported ${newTables.length} tables successfully!` });
+                } else {
+                    await AppModal.show({ title: 'Import Failed', body: "Could not find any standard CREATE TABLE statements." });
+                }
+                document.getElementById('import-sql').value = '';
+            };
+            reader.readAsText(file);
+        }
+
+    </script>
+</body>
+</html>

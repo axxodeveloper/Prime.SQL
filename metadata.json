@@ -1,0 +1,8 @@
+{
+  "name": "Prime SQL as ZIP File",
+  "description": "Serverless SQL Live Previewer powered by PyScript and WebAssembly SQLite.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
